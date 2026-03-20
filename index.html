@@ -1,0 +1,762 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IoT Environmental Predictor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=DM+Serif+Display:ital@0;1&display=swap" rel="stylesheet">
+<style>
+
+  /* ── Reset & base ─────────────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:     #0a0e13;
+    --panel:  #111820;
+    --border: #1e2a35;
+    --green:  #3ddc84;
+    --amber:  #f0a500;
+    --blue:   #4fa3e0;
+    --red:    #e05c5c;
+    --dim:    #4a6070;
+    --mid:    #7a9bb0;
+    --text:   #d0dde8;
+    --bright: #eef4fa;
+  }
+
+  html { scroll-behavior: smooth; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 14px;
+    line-height: 1.75;
+    overflow-x: hidden;
+  }
+
+  /* ── Scroll reveal ────────────────────────────────────────────────────── */
+  .reveal {
+    opacity: 0;
+    transform: translateY(28px);
+    transition: opacity 0.6s ease, transform 0.6s ease;
+  }
+  .reveal.visible { opacity: 1; transform: none; }
+
+  /* ── Layout ───────────────────────────────────────────────────────────── */
+  .container { max-width: 860px; margin: 0 auto; padding: 0 24px; }
+
+  section { padding: 80px 0; }
+  section + section { border-top: 1px solid var(--border); }
+
+  /* ── Header ───────────────────────────────────────────────────────────── */
+  header {
+    padding: 100px 0 80px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Animated grid background */
+  header::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background-image:
+      linear-gradient(var(--border) 1px, transparent 1px),
+      linear-gradient(90deg, var(--border) 1px, transparent 1px);
+    background-size: 40px 40px;
+    opacity: 0.35;
+    animation: gridshift 20s linear infinite;
+  }
+
+  @keyframes gridshift {
+    0%   { background-position: 0 0; }
+    100% { background-position: 40px 40px; }
+  }
+
+  header::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: radial-gradient(ellipse 60% 60% at 50% 100%, rgba(10,14,19,0.9) 30%, transparent 100%);
+  }
+
+  .header-inner {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+  }
+
+  .tag {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--green);
+    border: 1px solid var(--green);
+    padding: 3px 10px;
+    margin-bottom: 28px;
+    opacity: 0;
+    animation: fadein 0.6s 0.2s forwards;
+  }
+
+  h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(32px, 6vw, 58px);
+    color: var(--bright);
+    line-height: 1.15;
+    margin-bottom: 20px;
+    opacity: 0;
+    animation: fadein 0.7s 0.4s forwards;
+  }
+
+  h1 em {
+    font-style: italic;
+    color: var(--amber);
+  }
+
+  .sub {
+    font-size: 13px;
+    color: var(--mid);
+    max-width: 520px;
+    margin: 0 auto 36px;
+    opacity: 0;
+    animation: fadein 0.7s 0.6s forwards;
+  }
+
+  .header-links {
+    display: flex;
+    gap: 12px;
+    justify-content: center;
+    flex-wrap: wrap;
+    opacity: 0;
+    animation: fadein 0.7s 0.8s forwards;
+  }
+
+  .btn {
+    display: inline-block;
+    padding: 9px 20px;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-decoration: none;
+    border: 1px solid currentColor;
+    transition: background 0.2s, color 0.2s;
+    cursor: pointer;
+  }
+  .btn-green { color: var(--green); }
+  .btn-green:hover { background: var(--green); color: var(--bg); }
+  .btn-dim   { color: var(--dim); }
+  .btn-dim:hover { background: var(--border); color: var(--text); }
+
+  @keyframes fadein { to { opacity: 1; } }
+
+  /* ── Live sensor bar ──────────────────────────────────────────────────── */
+  .sensor-strip {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 20px 28px;
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 20px;
+    margin: 0 0 0px;
+  }
+
+  .sensor-item { display: flex; flex-direction: column; gap: 4px; }
+
+  .sensor-label {
+    font-size: 10px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--dim);
+  }
+
+  .sensor-value {
+    font-size: 22px;
+    font-weight: 600;
+    color: var(--green);
+    transition: color 0.4s;
+  }
+
+  .sensor-bar {
+    height: 2px;
+    background: var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+  .sensor-bar-fill {
+    height: 100%;
+    background: var(--green);
+    width: 0%;
+    transition: width 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  /* ── Section headings ─────────────────────────────────────────────────── */
+  .section-label {
+    font-size: 10px;
+    letter-spacing: 0.18em;
+    text-transform: uppercase;
+    color: var(--dim);
+    margin-bottom: 8px;
+  }
+
+  h2 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(22px, 4vw, 34px);
+    color: var(--bright);
+    margin-bottom: 20px;
+    line-height: 1.2;
+  }
+
+  p { color: var(--mid); margin-bottom: 16px; max-width: 660px; }
+  p strong { color: var(--text); font-weight: 500; }
+
+  /* ── Pipeline steps ───────────────────────────────────────────────────── */
+  .steps { display: flex; flex-direction: column; gap: 0; margin-top: 36px; }
+
+  .step {
+    display: grid;
+    grid-template-columns: 48px 1fr;
+    gap: 0 20px;
+    padding-bottom: 32px;
+    position: relative;
+  }
+
+  .step:not(:last-child)::after {
+    content: '';
+    position: absolute;
+    left: 23px;
+    top: 46px;
+    bottom: 0;
+    width: 1px;
+    background: var(--border);
+  }
+
+  .step-num {
+    width: 46px;
+    height: 46px;
+    border: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 12px;
+    color: var(--green);
+    flex-shrink: 0;
+    background: var(--panel);
+    position: relative;
+    z-index: 1;
+  }
+
+  .step-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: var(--bright);
+    margin-bottom: 4px;
+    padding-top: 12px;
+  }
+
+  .step-desc { color: var(--mid); font-size: 13px; }
+
+  /* ── Results table ────────────────────────────────────────────────────── */
+  .results-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 28px;
+    font-size: 13px;
+  }
+
+  .results-table th {
+    text-align: left;
+    padding: 8px 14px;
+    color: var(--dim);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border);
+    font-weight: 400;
+  }
+
+  .results-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border);
+    color: var(--mid);
+  }
+
+  .results-table tr.best td { color: var(--text); }
+  .results-table tr.best td:first-child { color: var(--green); }
+
+  .badge {
+    display: inline-block;
+    font-size: 9px;
+    padding: 2px 7px;
+    background: rgba(61,220,132,0.12);
+    border: 1px solid rgba(61,220,132,0.3);
+    color: var(--green);
+    margin-left: 8px;
+    vertical-align: middle;
+    letter-spacing: 0.08em;
+  }
+
+  /* ── Figures ──────────────────────────────────────────────────────────── */
+  .fig-block { margin-top: 36px; }
+
+  .fig-block img {
+    width: 100%;
+    border: 1px solid var(--border);
+    display: block;
+  }
+
+  .fig-caption {
+    font-size: 11px;
+    color: var(--dim);
+    margin-top: 10px;
+    padding-left: 2px;
+  }
+
+  /* ── Feature importance bars ──────────────────────────────────────────── */
+  .feat-bars { margin-top: 28px; display: flex; flex-direction: column; gap: 10px; }
+
+  .feat-row { display: grid; grid-template-columns: 140px 1fr 50px; align-items: center; gap: 12px; }
+
+  .feat-name { font-size: 12px; color: var(--mid); text-align: right; }
+
+  .feat-track {
+    height: 6px;
+    background: var(--border);
+    position: relative;
+    overflow: hidden;
+  }
+
+  .feat-fill {
+    height: 100%;
+    width: 0%;
+    transition: width 1.4s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .feat-pct { font-size: 11px; color: var(--dim); }
+
+  /* ── Finding card ─────────────────────────────────────────────────────── */
+  .finding {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--amber);
+    padding: 20px 24px;
+    margin-top: 28px;
+  }
+
+  .finding p { color: var(--text); margin: 0; }
+
+  /* ── Code block ───────────────────────────────────────────────────────── */
+  pre {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    padding: 20px 24px;
+    overflow-x: auto;
+    margin-top: 20px;
+    line-height: 1.6;
+  }
+  code { color: var(--green); font-family: inherit; font-size: 13px; }
+  .kw  { color: var(--blue); }
+  .cm  { color: var(--dim); }
+  .st  { color: var(--amber); }
+
+  /* ── Footer ───────────────────────────────────────────────────────────── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 40px 0;
+    text-align: center;
+    font-size: 12px;
+    color: var(--dim);
+  }
+  footer a { color: var(--mid); text-decoration: none; }
+  footer a:hover { color: var(--green); }
+
+</style>
+</head>
+<body>
+
+<!-- ── Header ──────────────────────────────────────────────────────────────── -->
+<header>
+  <div class="container header-inner">
+    <div class="tag">IoT + Machine Learning</div>
+    <h1>Predicting <em>temperature</em><br>from sensor noise</h1>
+    <p class="sub">
+      Three regression models trained on real DHT11, LDR, and CO2 data.
+      One clear winner. One surprising result.
+    </p>
+    <div class="header-links">
+      <a href="https://github.com/sobanmujtaba/IoT-Environmental-Predictor" class="btn btn-green" target="_blank">View on GitHub</a>
+      <a href="https://archive.ics.uci.edu/dataset/357/occupancy+detection" class="btn btn-dim" target="_blank">Dataset (UCI)</a>
+    </div>
+  </div>
+</header>
+
+<!-- ── Sensor strip ─────────────────────────────────────────────────────────── -->
+<div class="container">
+  <div class="sensor-strip reveal">
+    <div class="sensor-item">
+      <div class="sensor-label">Temperature</div>
+      <div class="sensor-value" id="sv-temp" style="color:var(--amber)">--</div>
+      <div class="sensor-bar"><div class="sensor-bar-fill" id="sb-temp" style="background:var(--amber)"></div></div>
+    </div>
+    <div class="sensor-item">
+      <div class="sensor-label">Humidity</div>
+      <div class="sensor-value" id="sv-hum" style="color:var(--blue)">--</div>
+      <div class="sensor-bar"><div class="sensor-bar-fill" id="sb-hum" style="background:var(--blue)"></div></div>
+    </div>
+    <div class="sensor-item">
+      <div class="sensor-label">Light (LDR)</div>
+      <div class="sensor-value" id="sv-light" style="color:var(--green)">--</div>
+      <div class="sensor-bar"><div class="sensor-bar-fill" id="sb-light"></div></div>
+    </div>
+    <div class="sensor-item">
+      <div class="sensor-label">CO2 (ppm)</div>
+      <div class="sensor-value" id="sv-co2" style="color:var(--red)">--</div>
+      <div class="sensor-bar"><div class="sensor-bar-fill" id="sb-co2" style="background:var(--red)"></div></div>
+    </div>
+    <div class="sensor-item">
+      <div class="sensor-label">Predicted Temp</div>
+      <div class="sensor-value" id="sv-pred" style="color:var(--green)">--</div>
+      <div class="sensor-bar"><div class="sensor-bar-fill" id="sb-pred" style="background:var(--green)"></div></div>
+    </div>
+  </div>
+  <div style="font-size:10px;color:var(--dim);margin-top:8px;text-align:right;letter-spacing:0.05em">
+    Simulated readings from UCI dataset samples
+  </div>
+</div>
+
+<!-- ── What this is ─────────────────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">// overview</div>
+      <h2>What this project does</h2>
+      <p>
+        Cheap IoT sensors like the DHT11 drift, saturate, and give noisy readings.
+        This project asks: can we cross-validate what one sensor reports against
+        what the others suggest it should be?
+      </p>
+      <p>
+        Three regression models learn the relationship between <strong>humidity, light,
+        CO2, and time-of-day</strong> and the room temperature. Trained on one week of
+        real office sensor data, then tested on two separate time windows to see
+        how well the learned patterns hold up.
+      </p>
+    </div>
+
+    <div class="steps reveal">
+      <div class="step">
+        <div class="step-num">01</div>
+        <div>
+          <div class="step-title">Load the UCI splits</div>
+          <div class="step-desc">Three pre-defined files: training, test1 (same week), test2 (following week). Keeps results comparable with the original paper.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">02</div>
+        <div>
+          <div class="step-title">Clean for physical limits</div>
+          <div class="step-desc">Screen readings outside DHT11 operating range (5-45°C, 0-100% RH) and CO2 sensor limits. The real dataset had zero bad rows — useful to know.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">03</div>
+        <div>
+          <div class="step-title">Engineer time features</div>
+          <div class="step-desc">Hour encoded as sine and cosine so the model understands 23:00 and 00:01 are adjacent. LDR ratio computed against 60-min rolling max to capture relative brightness transitions.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">04</div>
+        <div>
+          <div class="step-title">Train three models</div>
+          <div class="step-desc">Linear Regression (scaled), Random Forest (100 trees, depth 8), Gradient Boosting (150 estimators, lr=0.08). Each evaluated on both test windows separately.</div>
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">05</div>
+        <div>
+          <div class="step-title">Compare and explain</div>
+          <div class="step-desc">Metrics, residuals, and feature importances. The results tell a clear story about which model actually generalizes — and why.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── EDA ───────────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">// exploratory analysis</div>
+      <h2>What the sensors tell each other</h2>
+      <p>
+        Temperature, light, and CO2 all rise together when the room is occupied.
+        Humidity moves inversely with temperature — the physical relationship is
+        real and consistent across the dataset.
+      </p>
+    </div>
+    <div class="fig-block reveal">
+      <img src="assets/fig1_eda.png" alt="EDA plots: temperature timeline, correlation matrix, sensor distributions">
+      <div class="fig-caption">
+        Top: temperature across all three dataset splits (different weeks).
+        Middle: correlation matrix and Light vs Temperature scatter by occupancy.
+        Bottom: sensor value distributions for the training set.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Results ───────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">// model results</div>
+      <h2>Linear regression wins, and the gap is not close</h2>
+      <p>
+        Evaluated on two separate time windows. Test1 is from the same week as
+        training (pre-training dates). Test2 is the following week — a completely
+        fresh thermal environment.
+      </p>
+    </div>
+
+    <table class="results-table reveal">
+      <thead>
+        <tr>
+          <th>Model</th>
+          <th>Test1 R²</th>
+          <th>Test1 RMSE</th>
+          <th>Test2 R²</th>
+          <th>Test2 RMSE</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="best">
+          <td>Linear Regression <span class="badge">best</span></td>
+          <td>0.9716</td>
+          <td>0.1733 °C</td>
+          <td>0.8981</td>
+          <td>0.3258 °C</td>
+        </tr>
+        <tr>
+          <td>Gradient Boosting</td>
+          <td>0.3936</td>
+          <td>0.8004 °C</td>
+          <td>0.1215</td>
+          <td>0.9566 °C</td>
+        </tr>
+        <tr>
+          <td>Random Forest</td>
+          <td>0.1155</td>
+          <td>0.9666 °C</td>
+          <td>-0.7905</td>
+          <td>1.3657 °C</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <div class="finding reveal">
+      <p>
+        Random Forest achieves R² = -0.79 on Test2. A negative R² means the model
+        predicts worse than just guessing the training mean every time.
+        It memorized the thermal fingerprint of one specific week and could not generalize
+        when the heating pattern shifted slightly the following week.
+        This is distribution shift — one of the most common failure modes in real IoT deployments.
+      </p>
+    </div>
+
+    <div class="fig-block reveal" style="margin-top:36px">
+      <img src="assets/fig2_model_eval.png" alt="Actual vs predicted scatter plots for all three models">
+      <div class="fig-caption">
+        Actual vs predicted temperature on Test1. Linear Regression predictions cluster tightly
+        along the diagonal. Tree models show systematic bias and spread.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Feature importance ─────────────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">// feature importance</div>
+      <h2>The LDR knows more than you think</h2>
+      <p>
+        Light intensity is the dominant predictor of temperature — more than humidity
+        or CO2. That sounds backwards until you realize what Light is actually encoding:
+        occupancy. Lights on means people in the room, and people generate heat.
+      </p>
+      <p>
+        The LDR reading is doing double duty as an indirect body-heat sensor.
+      </p>
+    </div>
+
+    <div class="feat-bars reveal" id="feat-bars">
+      <div class="feat-row">
+        <div class="feat-name">Light (LDR)</div>
+        <div class="feat-track"><div class="feat-fill" data-pct="46.3" style="background:var(--green)"></div></div>
+        <div class="feat-pct">46.3%</div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-name">CO2</div>
+        <div class="feat-track"><div class="feat-fill" data-pct="16.2" style="background:var(--blue)"></div></div>
+        <div class="feat-pct">16.2%</div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-name">Humidity</div>
+        <div class="feat-track"><div class="feat-fill" data-pct="14.9" style="background:var(--blue)"></div></div>
+        <div class="feat-pct">14.9%</div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-name">HumidityRatio</div>
+        <div class="feat-track"><div class="feat-fill" data-pct="9.8" style="background:var(--amber)"></div></div>
+        <div class="feat-pct">9.8%</div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-name">day_of_week</div>
+        <div class="feat-track"><div class="feat-fill" data-pct="6.1" style="background:var(--dim)"></div></div>
+        <div class="feat-pct">6.1%</div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-name">hour_sin</div>
+        <div class="feat-track"><div class="feat-fill" data-pct="5.8" style="background:var(--dim)"></div></div>
+        <div class="feat-pct">5.8%</div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-name">hour_cos</div>
+        <div class="feat-track"><div class="feat-fill" data-pct="0.9" style="background:var(--dim)"></div></div>
+        <div class="feat-pct">0.9%</div>
+      </div>
+      <div class="feat-row">
+        <div class="feat-name">light_ratio</div>
+        <div class="feat-track"><div class="feat-fill" data-pct="0.1" style="background:var(--dim)"></div></div>
+        <div class="feat-pct">0.1%</div>
+      </div>
+    </div>
+
+    <div class="fig-block reveal" style="margin-top:36px">
+      <img src="assets/fig3_comparison.png" alt="Feature importance bar chart and model comparison across test splits">
+      <div class="fig-caption">
+        Left: Random Forest feature importances. Right: R² and RMSE across both test splits.
+        The degradation from Test1 to Test2 is the distribution shift problem made visible.
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── Code ──────────────────────────────────────────────────────────────────── -->
+<section>
+  <div class="container">
+    <div class="reveal">
+      <div class="section-label">// run it yourself</div>
+      <h2>Four steps to reproduce</h2>
+      <p>
+        Download the UCI dataset files, install dependencies, run the script.
+        The code is intentionally short — under 90 lines including comments.
+      </p>
+    </div>
+
+    <pre class="reveal"><code><span class="cm"># 1. Clone the repo</span>
+git clone https://github.com/sobanmujtaba/IoT-Environmental-Predictor
+cd IoT-Environmental-Predictor
+
+<span class="cm"># 2. Install dependencies</span>
+pip install scikit-learn pandas numpy matplotlib
+
+<span class="cm"># 3. Download the dataset (place alongside predict.py)</span>
+<span class="cm">#    https://archive.ics.uci.edu/dataset/357/occupancy+detection</span>
+<span class="cm">#    Files: datatraining.txt  datatest.txt  datatest2.txt</span>
+
+<span class="cm"># 4. Run</span>
+python predict.py</code></pre>
+  </div>
+</section>
+
+<!-- ── Footer ────────────────────────────────────────────────────────────────── -->
+<footer>
+  <div class="container">
+    <p>
+      Built by <a href="https://github.com/sobanmujtaba" target="_blank">Soban Mujtaba</a>
+      &nbsp;&middot;&nbsp;
+      Dataset: Candanedo &amp; Feldheim, 2016
+    </p>
+    <p style="margin-top:10px;">
+      <span><a href="https://github.com/sobanmujtaba/IoT-Environmental-Predictor" target="_blank">github.com/sobanmujtaba/IoT-Environmental-Predictor</a></span>
+    </p>
+  </div>
+</footer>
+
+<script>
+  // ── Scroll reveal ─────────────────────────────────────────────────────────
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        e.target.classList.add('visible');
+
+        // Animate feature bars when their section scrolls in
+        if (e.target.id === 'feat-bars') {
+          e.target.querySelectorAll('.feat-fill').forEach(bar => {
+            bar.style.width = bar.dataset.pct + '%';
+          });
+        }
+      }
+    });
+  }, { threshold: 0.12 });
+
+  document.querySelectorAll('.reveal').forEach(el => observer.observe(el));
+
+  // Animate sensor strip bars on load
+  document.querySelectorAll('.sensor-bar-fill').forEach(b => {
+    b.style.width = '0%';
+  });
+
+  // ── Simulated live sensor readings ────────────────────────────────────────
+  // Sample rows drawn from the real UCI dataset
+  const samples = [
+    { temp: 23.18, hum: 27.27,  light: 426,  co2: 721  },
+    { temp: 20.89, hum: 27.79,  light: 0,    co2: 638  },
+    { temp: 19.70, hum: 16.75,  light: 0,    co2: 413  },
+    { temp: 21.39, hum: 30.53,  light: 585,  co2: 1189 },
+    { temp: 22.60, hum: 26.27,  light: 1039, co2: 1449 },
+    { temp: 19.00, hum: 18.00,  light: 0,    co2: 448  },
+    { temp: 20.14, hum: 27.90,  light: 252,  co2: 553  },
+  ];
+
+  // Simple linear model coefficients derived from actual training
+  // (approximate — for demo display only)
+  function predictTemp(s) {
+    return (
+      21.5
+      - 0.04  * (s.hum - 25)
+      + 0.003 * s.light
+      + 0.003 * (s.co2 - 600)
+    ).toFixed(2);
+  }
+
+  let idx = 0;
+  function updateSensors() {
+    const s = samples[idx % samples.length];
+    idx++;
+
+    document.getElementById('sv-temp').textContent  = s.temp.toFixed(2) + ' °C';
+    document.getElementById('sv-hum').textContent   = s.hum.toFixed(2)  + ' %';
+    document.getElementById('sv-light').textContent = s.light + ' lux';
+    document.getElementById('sv-co2').textContent   = s.co2   + ' ppm';
+    document.getElementById('sv-pred').textContent  = predictTemp(s) + ' °C';
+
+    document.getElementById('sb-temp').style.width  = ((s.temp - 18) / 8 * 100).toFixed(1) + '%';
+    document.getElementById('sb-hum').style.width   = (s.hum / 50 * 100).toFixed(1) + '%';
+    document.getElementById('sb-light').style.width = (s.light / 1600 * 100).toFixed(1) + '%';
+    document.getElementById('sb-co2').style.width   = ((s.co2 - 400) / 1100 * 100).toFixed(1) + '%';
+    document.getElementById('sb-pred').style.width  = ((parseFloat(predictTemp(s)) - 18) / 8 * 100).toFixed(1) + '%';
+  }
+
+  // Initial update after a short delay, then cycle every 3s
+  setTimeout(() => {
+    updateSensors();
+    setInterval(updateSensors, 3000);
+  }, 1000);
+</script>
+</body>
+</html>

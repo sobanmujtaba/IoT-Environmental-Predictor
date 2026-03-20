@@ -1,0 +1,6 @@
+echo "datatraining.txt"
+datatest.txt
+datatest2.txt
+venv/
+__pycache__/
+*.pyc"
